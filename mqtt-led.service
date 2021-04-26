@@ -1,0 +1,11 @@
+[Unit]
+Description=mqtt-led
+
+[Service]
+ExecStart=/usr/local/bin/led-mqtt \
+  -t "text line 1" \
+  -u "text line 2" \
+  -S 'tcp://127.0.0.1:1883'
+
+[Install]
+WantedBy=multi-user.target

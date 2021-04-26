@@ -34,6 +34,9 @@ clean:
 	rm -f $(OBJECTS) $(BINARIES)
 	$(MAKE) -C $(RGB_LIBDIR) clean
 
+install:
+	install -m 755 led-mqtt /usr/local/bin
+
 FORCE:
 .PHONY: FORCE
 
