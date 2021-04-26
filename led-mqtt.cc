@@ -4,19 +4,24 @@
 // (but note, once linked against the led-matrix library, this is
 // covered by the GPL v2)
 
+#include <iostream>
+#include <cstdlib>
+#include <string>
+#include <cstring>
+#include <cctype>
+#include <thread>
+#include <chrono>
+#include "mqtt/async_client.h"
 #include "led-matrix.h"
 #include "threaded-canvas-manipulator.h"
 #include "transformer.h"
 #include "graphics.h"
-#include "mqtt/async_client.h"
-#include "jsoncpp/json/json.h" // sudo aptitude install libjsoncpp-dev
-
+#include "jsoncpp/json/json.h"
 #include <assert.h>
 #include <getopt.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
-// #include <stdlib.h>
 #include <unistd.h>
 #include <algorithm>
 
@@ -29,9 +34,13 @@
 #include <chrono>
 
 #include <unordered_map>
+std::string CLIENT_ID = "led-mqtt-client";
+std::string mqtt_topic ="mumalab/room/ledpanel/#";
+std::string mqtt_server = "tcp://localhost:1883";
 
-#define MQTT_SERVER "tcp://mqtt.munichmakerlab.de:1883"
-#define MQTT_TOPIC "mumalab/room/ledpanel/#"
+const int	QOS = 1;
+const int	N_RETRY_ATTEMPTS = 1000;
+
 #define MQTT_USERNAME ""
 #define MQTT_PASSWORD ""
 #define MQTT_CLIENTID "led-mqtt-client"
@@ -51,7 +60,6 @@ using std::min;
 using std::max;
 
 using namespace rgb_matrix;
-
 typedef std::unordered_map<std::string, std::string> params_map;
 
 struct text {
@@ -63,11 +71,6 @@ struct text {
   int x;
   int y;
 };
-
-/*
- * The following are demo image generators. They all use the utility
- * class ThreadedCanvasManipulator to generate new frames.
- */
 
 class TextScroller : public ThreadedCanvasManipulator {
 public:
@@ -85,7 +88,7 @@ public:
     offscreen_(matrix_->CreateFrameCanvas()),
     screen_height(matrix_->transformer()->Transform(offscreen_)->height()),
     screen_width(matrix_->transformer()->Transform(offscreen_)->width())
-  { 
+  {
     font1_.LoadFont("fonts/10x20.bdf");
     font2_.LoadFont("fonts/7x14.bdf");
 
@@ -103,12 +106,12 @@ public:
     timepoint_t now = std::chrono::steady_clock::now();
     timepoint_t time_next1 = now + std::chrono::milliseconds(speed1_);
     timepoint_t time_next2 = now + std::chrono::milliseconds(speed2_);
-    
+
     while (running()) {
       matrix_->transformer()->Transform(offscreen_)->Clear();
       if (!once1_.empty()) {
         DrawText(matrix_->transformer()->Transform(offscreen_), font1_, x1_, y1_, color1_, once1_.c_str());
-      } 
+      }
       else if (!textleft1_.empty() || !textmid1_.empty() || !textright1_.empty()) {
         if (!textleft1_.empty()) {
           DrawText(matrix_->transformer()->Transform(offscreen_), font1_, 1, y1_, color1_, textleft1_.c_str());
@@ -126,7 +129,7 @@ public:
 
       if (!once2_.empty()) {
         DrawText(matrix_->transformer()->Transform(offscreen_), font2_, x2_, y2_, color2_, once2_.c_str());
-      } 
+      }
       else if (!textleft2_.empty() || !textmid2_.empty() || !textright2_.empty()) {
         if (!textleft2_.empty()) {
           DrawText(matrix_->transformer()->Transform(offscreen_), font2_, 1, y2_, color2_, textleft2_.c_str());
@@ -141,7 +144,7 @@ public:
       else {
         DrawText(matrix_->transformer()->Transform(offscreen_), font2_, x2_, y2_, color2_, text2_.c_str());
       }
-      
+
       //std::this_thread::yield();
       offscreen_ = matrix_->SwapOnVSync(offscreen_);
       //std::this_thread::yield();
@@ -149,7 +152,7 @@ public:
       if (time_next1 < time_next2) {
         if (time_next1 - std::chrono::milliseconds(2) > now)
           std::this_thread::sleep_for(time_next1 - now);
-      } 
+      }
       else {
         if (time_next2 - std::chrono::milliseconds(2) > now)
           std::this_thread::sleep_for(time_next2 - now);
@@ -243,7 +246,7 @@ public:
   }
 
 private:
-  
+
   int calc_offset_(std::string str, Font& f) {
     int so = 0;
     for(char& c : str) {
@@ -256,7 +259,7 @@ private:
     }*/
     return so * (-1);
   }
-  
+
   Color transform_color(const std::string& str) {
     std::size_t pos = 0;
     std::string s = str;
@@ -274,7 +277,7 @@ private:
       return (Color(0, 0, 255));
     }
   }
-  
+
   std::string text1_;
   std::string text2_;
   std::string once1_;
@@ -284,7 +287,7 @@ private:
   std::string textright1_;
   std::string textleft2_;
   std::string textmid2_;
-  std::string textright2_;  
+  std::string textright2_;
   int scroll_offset1_;
   int scroll_offset2_;
   Color color1_;
@@ -302,7 +305,6 @@ private:
   int y1_;
   int y2_;
 };
-
 
 
 // Simple generator that pulses through RGB and White.
@@ -335,7 +337,7 @@ public:
       off_screen_canvas_ = matrix_->SwapOnVSync(off_screen_canvas_);
     }
   }
-  
+
 private:
   RGBMatrix *const matrix_;
   FrameCanvas *off_screen_canvas_;
@@ -368,7 +370,7 @@ public:
       usleep(20 * 1000);
     }
   }
-  
+
 private:
   RGBMatrix *const matrix_;
 };
@@ -472,9 +474,9 @@ public:
       }
     }
   }
-  
+
 private:
-  
+
   void Rotate(int x, int y, float angle,
               float *new_x, float *new_y) {
     *new_x = x * cosf(angle) - y * sinf(angle);
@@ -580,7 +582,7 @@ public:
       }
     }
   }
-  
+
 private:
   struct Pixel {
     Pixel() : red(0), green(0), blue(0){}
@@ -700,7 +702,7 @@ public:
       usleep(delay_ms_ * 1000); // ms
     }
   }
-  
+
 private:
   void updateValues() {
     // Copy values to newValues
@@ -967,7 +969,7 @@ public:
       usleep(delay_ms_ * 1000);
     }
   }
-  
+
 private:
   void updatePixel(int x, int y) {
     switch (values_[x][y]) {
@@ -1087,7 +1089,7 @@ public:
       usleep(delay_ms_ * 1000);
     }
   }
-  
+
 private:
   void drawBarRow(int bar, uint8_t y, uint8_t r, uint8_t g, uint8_t b) {
     for (uint8_t x=bar*barWidth_; x<(bar+1)*barWidth_; ++x) {
@@ -1169,7 +1171,7 @@ public:
       usleep(delay_ms_ * 1000);
     }
   }
-  
+
 private:
   /// citizen will hold dna information, a 24-bit color value.
   struct citizen {
@@ -1337,24 +1339,24 @@ public:
     if (pwm_bits >= 0 && !matrix_->SetPWMBits(pwm_bits)) {
       fprintf(stderr, "Invalid range of pwm-bits\n");
     }
-        
+
     LinkedTransformer *transformer_ = new LinkedTransformer();
     matrix_->SetTransformer(transformer_);
     if (large_display) {
       // Mapping the coordinates of a 32x128 display mapped to a square of 64x64
       transformer_->AddTransformer(new LargeSquare64x64Transformer());
     }
-    
+
     if (rotation > 0) {
       transformer_->AddTransformer(new RotateTransformer(rotation));
     }
-        
+
     canvas_ = matrix_;
   }
-    
+
   ~Display() {
     delete image_gen_;
-    delete canvas_;  
+    delete canvas_;
     transformer_->DeleteTransformers();
     delete transformer_;
   }
@@ -1370,20 +1372,20 @@ public:
     const char *image = NULL;
     std::string text = "Initializing";
     std::string color = "0,0,255";
-    
+
     for ( auto param = anim_params.begin(); param != anim_params.end(); ++param ) {
       std::cout << " " << param->first << ":" << param->second;
       if (param->first == "scroll_ms")
-        scroll_ms = std::stoi(param->second);      
+        scroll_ms = std::stoi(param->second);
       if (param->first == "image")
         image = param->second.c_str();
       if (param->first == "text")
-        text = param->second.c_str();  
+        text = param->second.c_str();
       //if (param->first == "color")
-      //  color = param->second;  
+      //  color = param->second;
     }
     std::cout << std::endl;
-        
+
     if (image_gen_) {
       image_gen_->Stop();
       matrix_->Clear();
@@ -1393,7 +1395,7 @@ public:
       case 0:
         image_gen_ = new RotatingBlockGenerator(canvas_, scroll_ms);
         break;
-                
+
       case 1:
       case 2:
         if (image) {
@@ -1408,31 +1410,31 @@ public:
           return 1;
         }
         break;
-      
+
       case 3:
         image_gen_ = new SimpleSquare(canvas_);
         break;
-        
+
       case 4:
         image_gen_ = new ColorPulseGenerator(matrix_);
         break;
-                
+
       case 5:
         image_gen_ = new GrayScaleBlock(canvas_);
         break;
-                
+
       case 6:
         image_gen_ = new Sandpile(canvas_, scroll_ms);
         break;
-                
+
       case 7:
         image_gen_ = new GameLife(canvas_, scroll_ms);
         break;
-                
+
       case 8:
         image_gen_ = new Ant(canvas_, scroll_ms);
         break;
-                
+
       case 9:
         image_gen_ = new VolumeBars(canvas_, scroll_ms, canvas_->width()/2);
         break;
@@ -1440,7 +1442,7 @@ public:
       case 10:
         image_gen_ = new GeneticColors(canvas_, scroll_ms);
         break;
-         
+
       case 11:
         image_gen_ = new BrightnessPulseGenerator(matrix_);
         break;
@@ -1458,7 +1460,7 @@ public:
     return 0;
   }
 
-    
+
 private:
   GPIO io_;
   RGBMatrix *matrix_;
@@ -1467,100 +1469,128 @@ private:
   ThreadedCanvasManipulator *image_gen_;
 };
 
-/***
-* 
-* MQTT relevant classes
-* 
-***/
+/////////////////////////////////////////////////////////////////////////////
 
-class action_listener : public virtual mqtt::iaction_listener {
+// Callbacks for the success or failures of requested actions.
+// This could be used to initiate further action, but here we just log the
+// results to the console.
+
+class action_listener : public virtual mqtt::iaction_listener
+{
+	std::string name_;
+
+	void on_failure(const mqtt::token& tok) override {
+		std::cout << name_ << " failure";
+		if (tok.get_message_id() != 0)
+			std::cout << " for token: [" << tok.get_message_id() << "]" << std::endl;
+		std::cout << std::endl;
+	}
+
+	void on_success(const mqtt::token& tok) override {
+		std::cout << name_ << " success";
+		if (tok.get_message_id() != 0)
+			std::cout << " for token: [" << tok.get_message_id() << "]" << std::endl;
+		auto top = tok.get_topics();
+		if (top && !top->empty())
+			std::cout << "\ttoken topic: '" << (*top)[0] << "', ..." << std::endl;
+		std::cout << std::endl;
+	}
+
 public:
-  action_listener(const std::string& name) : name_(name) {}
-
-private:
-  std::string name_;
-
-  virtual void on_failure(const mqtt::token& tok) {
-    std::cout << name_ << " failure";
-    if (tok.get_message_id() != 0)
-      std::cout << " (token: [" << tok.get_message_id() << "]" << std::endl;
-    std::cout << std::endl;
-  }
-
-  virtual void on_success(const mqtt::token& tok) {
-    std::cout << name_ << " success";
-    if (tok.get_message_id() != 0)
-      std::cout << " for token: [" << tok.get_message_id() << "]" << std::endl;
-    auto top = tok.get_topics();
-    if (top && !top->empty())
-      std::cout << "\ttoken topic: '" << (*top)[0] << "', ..." << std::endl;
-    std::cout << std::endl;
-  }
+	action_listener(const std::string& name) : name_(name) {}
 };
 
-class callback : public virtual mqtt::callback, public virtual mqtt::iaction_listener {
-public:
-  callback(mqtt::async_client& cli, mqtt::connect_options& connOpts, action_listener& listener, std::string& topic, int qos, Display* display)
-                                : cli_(cli), connOpts_(connOpts), listener_(listener), topic_(topic), qos_(qos), display_(display) {}
-private:
-  int nretry_;
-  mqtt::async_client& cli_;
-  mqtt::connect_options& connOpts_;
-  action_listener& listener_;
-  std::string topic_;
-  int qos_;
+/////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Local callback & listener class for use with the client connection.
+ * This is primarily intended to receive messages, but it will also monitor
+ * the connection to the broker. If the connection is lost, it will attempt
+ * to restore the connection and re-subscribe to the topic.
+ */
+class callback : public virtual mqtt::callback,
+					public virtual mqtt::iaction_listener
+
+{
+	// Counter for the number of connection retries
+	int nretry_;
+	// The MQTT client
+	mqtt::async_client& cli_;
+	// Options to use if we need to reconnect
+	mqtt::connect_options& connOpts_;
+	// An action listener to display the result of actions.
+	action_listener subListener_;
   Display* display_;
 
-  void reconnect() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    try {
-      cli_.connect(connOpts_, nullptr, *this);
-    }
-    catch (const mqtt::exception& exc) {
-      std::cerr << "Error: " << exc.what() << std::endl;
-      exit(1);
-    }
-  }
+	// This deomonstrates manually reconnecting to the broker by calling
+	// connect() again. This is a possibility for an application that keeps
+	// a copy of it's original connect_options, or if the app wants to
+	// reconnect with different options.
+	// Another way this can be done manually, if using the same options, is
+	// to just call the async_client::reconnect() method.
+	void reconnect() {
+		std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+		try {
+			cli_.connect(connOpts_, nullptr, *this);
+		}
+		catch (const mqtt::exception& exc) {
+			std::cerr << "Error: " << exc.what() << std::endl;
+			exit(1);
+		}
+	}
 
-  // Re-connection failure
-  virtual void on_failure(const mqtt::token& tok) {
-    std::cout << "Reconnection failed." << std::endl;
-    if (++nretry_ > 5)
-      exit(1);
-    reconnect();
-  }
+	// Re-connection failure
+	void on_failure(const mqtt::token& tok) override {
+		std::cout << "Connection attempt failed" << std::endl;
+		if (++nretry_ > N_RETRY_ATTEMPTS)
+			exit(1);
+		reconnect();
+	}
 
-  // Re-connection success
-  virtual void on_success(const mqtt::token& tok) {
-    std::cout << "Reconnection success" << std::endl;;
-    cli_.subscribe(topic_, qos_, nullptr, listener_);
-  }
+	// (Re)connection success
+	// Either this or connected() can be used for callbacks.
+	void on_success(const mqtt::token& tok) override {}
 
-  virtual void connection_lost(const std::string& cause) {
-    std::cout << "\nConnection lost" << std::endl;
-    if (!cause.empty())
-      std::cout << "\tcause: " << cause << std::endl;
+	// (Re)connection success
+	void connected(const std::string& cause) override {
+		std::cout << "\nConnection success" << std::endl;
+		std::cout << "\nSubscribing to topic '" << mqtt_topic << "'\n"
+			<< "\tfor client " << CLIENT_ID
+			<< " using QoS" << QOS << "\n"
+			<< "\nPress Q<Enter> to quit\n" << std::endl;
 
-    std::cout << "Reconnecting." << std::endl;
-    nretry_ = 0;
-    reconnect();
-  }
+		cli_.subscribe(mqtt_topic, QOS, nullptr, subListener_);
+	}
 
-  virtual void message_arrived(const std::string& topic, mqtt::message_ptr msg) {
+	// Callback for when the connection is lost.
+	// This will initiate the attempt to manually reconnect.
+	void connection_lost(const std::string& cause) override {
+		std::cout << "\nConnection lost" << std::endl;
+		if (!cause.empty())
+			std::cout << "\tcause: " << cause << std::endl;
+
+		std::cout << "Reconnecting..." << std::endl;
+		nretry_ = 0;
+		reconnect();
+	}
+
+	// Callback for when a message arrives.
+	void message_arrived(mqtt::const_message_ptr msg) override {
     params_map anim_params;
+		std::string topic = msg->get_topic();
     std::string topic_short;
-    
-    std::cout << "Message arrived" << std::endl;
-    std::cout << "\ttopic: '" << topic << "'" << std::endl;
-    
+
+		std::cout << "Message arrived" << std::endl;
+		std::cout << "\ttopic: '" << topic << "'" << std::endl;
+		std::cout << "\tpayload: '" << msg->to_string() << "'\n" << std::endl;
     // remove the prefix (the part we have subscribed to) first
-    topic_short = topic.substr(topic_.size()-1);
-    
+    topic_short = topic.substr(mqtt_topic.size()-1);
+
     // next part up to the / is the comment
     std::string command = topic_short.substr(0,topic_short.find_first_of("/"));
     std::cout << "\tCommand: " << command << std::endl;
-    
+
     // next part (the rest of the topic) is option for the command
     std::string option = topic_short.substr(topic_short.find_first_of("/")+1);
     std::cout << "\tOption: " << option << std::endl;
@@ -1571,7 +1601,7 @@ private:
       Json::Reader jsonReader;
       if (jsonReader.parse(msg->to_string(), jsonData) && msg->to_string().substr(0,1) == "{") {
         std::cout << "\tJSON data" << std::endl;
-        std::cout << "\t" << jsonData.toStyledString() << std::endl;  
+        std::cout << "\t" << jsonData.toStyledString() << std::endl;
         for ( auto it = jsonData.begin(); it != jsonData.end(); ++it ) {
           if((*it).isArray()) {
             std::cout << "\t" << it.key().asString() << " : array" << std::endl;
@@ -1613,16 +1643,17 @@ private:
     } // end command
   }
 
-  virtual void delivery_complete(mqtt::delivery_token_ptr token) {}
+	void delivery_complete(mqtt::delivery_token_ptr token) override {}
+
+public:
+	callback(mqtt::async_client& cli, mqtt::connect_options& connOpts, Display* display)
+				: nretry_(0), cli_(cli), connOpts_(connOpts), subListener_("Subscription"), display_(display) {}
 };
 
-/***
-*
-* MAIN
-*
-***/
+/////////////////////////////////////////////////////////////////////////////
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[])
+{
   int rows = PANEL_ROWS;
   int chain = PANEL_CHAINS;
   int parallel = PANEL_PARALLEL;
@@ -1631,29 +1662,26 @@ int main(int argc, char *argv[]) {
   int rotation = PANEL_ROTATION;
   bool large_display = PANEL_LARGE_DISPLAY;
   bool do_luminance_correct = DO_LUMINANCE_CORRECT;
-  std::string mqtt_server(MQTT_SERVER);
-  std::string mqtt_topic(MQTT_TOPIC);
   std::string mqtt_username(MQTT_USERNAME);
   std::string mqtt_password(MQTT_PASSWORD);
   std::string text1(LED_TEXT1);
   std::string text2(LED_TEXT2);
   const std::string mqtt_clientid(MQTT_CLIENTID);
-  const int  mqtt_qos = 1;
   int animation = 12; // Initial Display animation
   params_map anim_params;
   int opt;
   bool as_daemon = false;
-  
+
   while ((opt = getopt(argc, argv, "dlD:r:P:c:p:b:m:LR:S:T:U:W:t:u:")) != -1) {
     switch (opt) {
     case 'D':
       animation = atoi(optarg);
       break;
-      
+
     case 'd':
       as_daemon = true;
       break;
-      
+
     case 'r':
       rows = atoi(optarg);
       break;
@@ -1692,11 +1720,11 @@ int main(int argc, char *argv[]) {
     case 'R':
       rotation = atoi(optarg);
       break;
-      
+
     case 'S':
       mqtt_server.assign(optarg);
       break;
-    
+
     case 'T':
       mqtt_topic.assign(optarg);
       break;
@@ -1712,11 +1740,11 @@ int main(int argc, char *argv[]) {
     case 't':
       text1.assign(optarg);
       break;
-      
+
     case 'u':
       text2.assign(optarg);
       break;
-                    
+
     default: /* '?' */
       return usage(argv[0]);
     }
@@ -1763,7 +1791,7 @@ int main(int argc, char *argv[]) {
   // Start daemon before we start any threads.
   if (as_daemon) {
     pid_t pid = fork();
-    
+
     /* An error occurred */
     if (pid < 0)
         exit(EXIT_FAILURE);
@@ -1784,51 +1812,54 @@ int main(int argc, char *argv[]) {
   Display* display = new Display(rows, chain, parallel, pwm_bits, brightness, rotation, large_display, do_luminance_correct);
   display->set_display(animation, anim_params);
   sleep(3); // display needs some time to load font etc.
-  
-  action_listener subListener("Subscription");
-  
-  mqtt::connect_options connOpts;
-  connOpts.set_keep_alive_interval(20);
-  connOpts.set_clean_session(true);
+
+	mqtt::async_client cli(mqtt_server, CLIENT_ID);
+
+	mqtt::connect_options connOpts;
+	connOpts.set_clean_session(false);
   if (!mqtt_username.empty())
     connOpts.set_user_name(mqtt_username);
   if (!mqtt_password.empty())
     connOpts.set_password(mqtt_password);
 
-  mqtt::async_client client(mqtt_server, mqtt_clientid);
-  callback cb(client, connOpts, subListener, mqtt_topic, mqtt_qos, display);
-  client.set_callback(cb);
 
-  try {
-    std::cout << "MQTT Waiting for the connection..." << std::flush;
-    client.connect(connOpts, nullptr, cb)->wait();
-    std::cout << "OK" << std::endl;
-    std::cout << "MQTT Subscribing to topic " << mqtt_topic << "\n"
-      << "for client " << mqtt_clientid
-      << " using QoS" << mqtt_qos << std::endl;
-    client.subscribe(mqtt_topic, mqtt_qos, nullptr, subListener)->wait();
-    std::cout << "Ready..." << std::endl << std::flush;
-    display->set_option("text1", text1);
-    display->set_option("text2", text2);
-    display->set_option("color2", "200,10,80");
-    display->set_option("speed2", "10");
+	// Install the callback(s) before connecting.
+	callback cb(cli, connOpts, display);
+	cli.set_callback(cb);
 
-    if (as_daemon) {
-      while(true){
-        sleep(INT_MAX);
-      }
-    } else {
-      std::cout << "Press <RETURN> to exit and reset LEDs"  << std::endl;
-      getchar();
-    }
+	// Start the connection.
+	// When completed, the callback will subscribe to topic.
 
-    std::cout << "MQTT Disconnecting..." << std::flush;
-    client.disconnect()->wait();
-    std::cout << "MQTT OK" << std::endl;
-  }
-  catch (const mqtt::exception& exc) {
-    std::cerr << "MQTT Error: " << exc.what() << std::endl;
-    return EXIT_FAILURE;
-  }
-  return EXIT_SUCCESS;
+	try {
+		std::cout << "Connecting to the MQTT server..." << std::flush;
+		cli.connect(connOpts, nullptr, cb);
+	}
+	catch (const mqtt::exception& exc) {
+		std::cerr << "\nERROR: Unable to connect to MQTT server: '"
+			<< mqtt_server << "'" << exc << std::endl;
+		return 1;
+	}
+	display->set_option("text1", text1);
+  display->set_option("text2", text2);
+  display->set_option("color2", "200,10,80");
+  display->set_option("speed2", "10");
+	// Just block till user tells us to quit.
+
+	while (std::tolower(std::cin.get()) != 'q')
+		;
+
+	// Disconnect
+
+	try {
+		std::cout << "\nDisconnecting from the MQTT server..." << std::flush;
+		cli.disconnect()->wait();
+		std::cout << "OK" << std::endl;
+	}
+	catch (const mqtt::exception& exc) {
+		std::cerr << exc << std::endl;
+		return 1;
+	}
+
+ 	return 0;
 }
+

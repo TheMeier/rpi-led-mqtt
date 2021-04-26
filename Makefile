@@ -10,7 +10,7 @@ RGB_LIBRARY_NAME=rgbmatrix
 RGB_LIBRARY=$(RGB_LIBDIR)/lib$(RGB_LIBRARY_NAME).a
 LDFLAGS+=-L$(PAHO_C_LIB) -L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -ljsoncpp -lpaho-mqtt3a -lpaho-mqttpp3 -lrt -lm -lpthread
 CPPFLAGS += -I$(PAHO_C_HEADERS)
-CXXFLAGS=-Wall -std=c++0x
+CXXFLAGS=-Wall -std=c++0x -Wno-deprecated-declarations
 ifdef DEBUG
 	CPPFLAGS += -DDEBUG
 	CXXFLAGS += -g -O0
@@ -36,5 +36,4 @@ clean:
 
 FORCE:
 .PHONY: FORCE
-
 
