@@ -16,7 +16,7 @@ sudo make install
 
 ```bash
 wget https://github.com/eclipse/paho.mqtt.cpp/archive/refs/tags/v1.2.0.tar.gz
-tar xzvf v1.2.0.tar.gz 
+tar xzvf v1.2.0.tar.gz
 cd paho.mqtt.cpp-1.2.0/
 cmake -DPAHO_WITH_SSL=TRUE -DPAHO_BUILD_DOCUMENTATION=FALSE -DPAHO_BUILD_STATIC=TRUE -DPAHO_BUILD_SAMPLES=TRUE
 make
@@ -54,3 +54,42 @@ run
 ```bash
 sudo ./led-mqtt -t "text line 1" -u "text line 2" -S 'tcp://127.0.0.1:1883'
 ```
+
+## Data format
+
+topic: <baseTopic>/<command>/<option>
+message: string
+
+example:
+mosquitto_pub -m "foo" -t 'mumalab/room/ledpanel/set/text1'
+
+### commands
+
+* set
+
+### options
+
+
+"text"
+"text1"
+"text2"
+"textleft"
+"textleft1""textleft2"
+"textmid"
+"textmid1"
+"textmid2"
+"textright"
+"textright1"
+"textright2"
+"once"
+"once1"
+"once2"
+"color"
+"color1"
+"color2"
+"speed"
+"speed1"
+"speed2"
+"font"
+"font1"
+"font2"
