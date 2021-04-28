@@ -11,6 +11,7 @@ RGB_LIBRARY=$(RGB_LIBDIR)/lib$(RGB_LIBRARY_NAME).a
 LDFLAGS+=-L$(PAHO_C_LIB) -L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -ljsoncpp -lpaho-mqtt3a -lpaho-mqttpp3 -lrt -lm -lpthread
 CPPFLAGS += -I$(PAHO_C_HEADERS)
 CXXFLAGS=-Wall -std=c++0x -Wno-deprecated-declarations
+DESTDIR=/usr/local
 ifdef DEBUG
 	CPPFLAGS += -DDEBUG
 	CXXFLAGS += -g -O0
@@ -35,7 +36,9 @@ clean:
 	$(MAKE) -C $(RGB_LIBDIR) clean
 
 install:
-	install -m 755 led-mqtt /usr/local/bin
+	install -m 755 led-mqtt $(DESTDIR)/bin
+	install -t "$(DESTDIR)/led-mqtt/fonts" -D  fonts/*
+  
 
 FORCE:
 .PHONY: FORCE

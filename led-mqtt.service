@@ -1,7 +1,8 @@
 [Unit]
-Description=mqtt-led
+Description=led-mqtt
 
 [Service]
+WorkingDirectory=/usr/local/led-mqtt
 ExecStart=/usr/local/bin/led-mqtt \
   -t "text line 1" \
   -u "text line 2" \

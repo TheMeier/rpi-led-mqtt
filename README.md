@@ -5,7 +5,8 @@ installed from source
 * <https://github.com/eclipse/paho.mqtt.c.git> (tag v1.3.8)
 
 ```bash
-git checkout v1.3.8
+wget https://github.com/eclipse/paho.mqtt.c/archive/refs/tags/v1.3.8.tar.gz
+tar xzvf v1.3.8.tar.gz
 cmake -DPAHO_WITH_SSL=TRUE -DPAHO_BUILD_DOCUMENTATION=FALSE -DPAHO_BUILD_STATIC=TRUE -DPAHO_BUILD_SAMPLES=TRUE
 make
 sudo make install
@@ -14,7 +15,9 @@ sudo make install
 * <https://github.com/eclipse/paho.mqtt.cpp> (tag 1.2.0)
 
 ```bash
-git checkout v1.3.8
+wget https://github.com/eclipse/paho.mqtt.cpp/archive/refs/tags/v1.2.0.tar.gz
+tar xzvf v1.2.0.tar.gz 
+cd paho.mqtt.cpp-1.2.0/
 cmake -DPAHO_WITH_SSL=TRUE -DPAHO_BUILD_DOCUMENTATION=FALSE -DPAHO_BUILD_STATIC=TRUE -DPAHO_BUILD_SAMPLES=TRUE
 make
 sudo make install
